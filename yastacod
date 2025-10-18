@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YASTAMEDIA - דף נחיתה חכם</title>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Floating Labels CSS - נשמר כדי להבטיח תאימות מלאה */
+        .floating-label {
+            transition: all 0.2s ease;
+            transform: translateY(0);
+            right: 0.5rem; /* עקביות RTL */
+            left: auto;
+        }
+
+        .floating-label.floated {
+            transform: translateY(-1.5rem) scale(0.75);
+            color: #9ca3af; /* Tailwind gray-400 */
+            right: 0.5rem;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-900 text-white p-4 min-h-screen flex flex-col items-center justify-center">
+
+    <div class="max-w-md w-full bg-gray-800 p-8 rounded-xl shadow-2xl border border-blue-600/50">
+        <img src="logo.png" alt="סמליל חברת YASTAMEDIA" class="mx-auto mb-4 h-12" />
+        <h2 class="text-3xl font-bold mb-6 text-center text-blue-400">השאר פרטים ונתחיל לעבוד</h2>
+        <div id="formVersionMessage" class="text-center text-sm mb-4 p-2 rounded bg-yellow-900/50 text-yellow-300" aria-live="assertive"></div>
+
+        <form id="contactForm" class="space-y-6">
+            <div class="relative">
+                <input type="text" id="name" name="name" required placeholder=" "
+                    class="border border-gray-600 bg-gray-700 text-white rounded-lg p-3 w-full focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-150"
+                    aria-label="שם מלא (שדה חובה)" aria-required="true" />
+                <label for="name" class="absolute top-3 right-3 text-gray-400 floating-label pointer-events-none">שם מלא*</label>
+                <span id="nameFeedback" class="feedback-message absolute left-3 top-1/2 transform -translate-y-1/2 text-xs" aria-live="assertive"></span>
+            </div>
+
+            <div class="relative">
+                <input type="tel" id="phone" name="phone" required placeholder=" "
+                    class="border border-gray-600 bg-gray-700 text-white rounded-lg p-3 w-full focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-150"
+                    aria-label="מספר טלפון (שדה חובה)" aria-required="true" />
+                <label for="phone" class="absolute top-3 right-3 text-gray-400 floating-label pointer-events-none">מספר טלפון*</label>
+                <span id="phoneFeedback" class="feedback-message absolute left-3 top-1/2 transform -translate-y-1/2 text-xs" aria-live="assertive"></span>
+            </div>
+
+            <div class="relative hidden" id="emailField">
+                <input type="email" id="email" name="email" placeholder=" "
+                    class="border border-gray-600 bg-gray-700 text-white rounded-lg p-3 w-full focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-150"
+                    aria-label="כתובת אימייל (שדה לא חובה)" />
+                <label for="email" class="absolute top-3 right-3 text-gray-400 floating-label pointer-events-none">כתובת אימייל (לא חובה)</label>
+                <span id="emailFeedback" class="feedback-message absolute left-3 top-1/2 transform -translate-y-1/2 text-xs" aria-live="assertive"></span>
+            </div>
+
+            <button type="submit"
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-opacity-50"
+                aria-label="שליחת טופס לידים">
+                שליחת פרטים
+            </button>
+            <div class="text-xs text-gray-400 text-center">* שדות חובה</div>
+        </form>
+    </div>
+
+    <div id="monitorDashboard" class="mt-10 w-full max-w-4xl bg-gray-800 p-6 rounded-xl shadow-2xl border border-green-600/50 hidden">
+        <h3 class="text-2xl font-bold mb-4 text-center text-green-400">דשבורד ניטור מערכות (נתוני דמו)</h3>
+        
+        <div class="grid md:grid-cols-2 gap-6">
+            <div class="p-4 bg-gray-900 rounded-lg">
+                <p class="text-gray-400 text-sm mb-2">גרף זמן תגובה (ms)</p>
+                <canvas id="latencyChart"></canvas>
+            </div>
+            
+            <div class="p-4 bg-gray-900 rounded-lg">
+                <p class="text-gray-400 text-sm mb-2">התפלגות נושאי פנייה לפי מערכת CRM</p>
+                <canvas id="topicDistributionChart"></canvas>
+            </div>
+        </div>
+
+        <div class="mt-6">
+            <p class="text-gray-400 text-sm mb-2">סטטוס מערכת (מבוסס Latency ממוצע)</p>
+            <div id="statusBar" class="h-4 rounded-full" role="progressbar" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
+            <div id="statusText" class="text-center mt-1 font-medium"></div>
+        </div>
+    </div>
+
+    <script>
+        // *** CRITICAL: REPLACE WITH YOUR ACTUAL GOOGLE APPS SCRIPT URL ***
+        const ENDPOINT_URL = "https://script.google.com/macros/s/TODO_GAS_ID/exec"; 
+
+        // --- 1. Floating Labels Logic ---
+        // (Uses CSS and default browser behavior after initial setup)
+
+        // --- 2. Feedback and Validation Logic ---
+        function setFeedback(element, message, isValid) {
+            element.textContent = message;
+            element.className = isValid ? 'text-green-400 font-medium' : 'text-red-400 font-medium';
+            // Clear message after 3 seconds if valid
+            if (isValid) {
+                setTimeout(() => {
+                    element.textContent = '';
+                    element.classList.remove('text-green-400');
+                }, 3000);
+            }
+        }
+
+        function validateField(field, regex, feedbackElement, errorMessage) {
+            const isRequired = field.hasAttribute('required');
+            const isValid = regex.test(field.value);
+
+            // Special case for non-required field that is left empty
+            if (!isRequired && field.value === '') {
+                setFeedback(feedbackElement, '', true);
+                return true;
+            }
+
+            if (isValid) {
+                setFeedback(feedbackElement, '✅ תקין', true);
+                return true;
+            } else {
+                setFeedback(feedbackElement, `❌ ${errorMessage}`, false);
+                return false;
+            }
+        }
+
+        // --- 3. A/B Testing & Form Versioning ---
+        const contactForm = document.getElementById('contactForm');
+        const emailFieldContainer = document.getElementById('emailField');
+        const emailFieldInput = document.getElementById('email');
+        const versionDisplay = document.getElementById('formVersionMessage');
+        let formVersion; 
+
+        function setupABTest() {
+            formVersion = Math.random() < 0.5 ? 'A' : 'B'; 
+            
+            if (formVersion === 'B') {
+                emailFieldContainer.classList.remove('hidden');
+                versionDisplay.textContent = 'גרסת טופס B (כולל שדה אימייל – נדרש לשליחה)';
+                emailFieldInput.setAttribute('required', 'required'); 
+            } else {
+                emailFieldContainer.classList.add('hidden');
+                versionDisplay.textContent = 'גרסת טופס A (שם וטלפון בלבד)';
+                emailFieldInput.removeAttribute('required'); 
+            }
+        }
+        setupABTest();
+
+
+        // --- 4. Form Submission Logic with Fetch (Production Ready) ---
+        contactForm.addEventListener('submit', async function (event) {
+            event.preventDefault();
+
+            // Validation checks using Grammarly-inspired texts
+            const nameValid = validateField(document.getElementById('name'), /^\s*\S+.+$/, document.getElementById('nameFeedback'), "אנא מלא שם תקין.");
+            const phoneValid = validateField(document.getElementById('phone'), /^(\d{9,10})$/, document.getElementById('phoneFeedback'), "מספר טלפון לא תקין. (10 ספרות, כולל קידומת)."); 
+            let emailValid = true;
+
+            // Only validate email if it's visible or required
+            if (!emailFieldContainer.classList.contains('hidden')) {
+                emailValid = validateField(emailFieldInput, /^[^@\s]+@[^@\s]+\.[^@\s]+$/, document.getElementById('emailFeedback'), "כתובת אימייל לא תקינה. ודא שהיא כוללת @ וסיומת.");
+            }
+
+            if (nameValid && phoneValid && emailValid) {
+                const formData = new FormData(contactForm);
+                formData.append('Form_Version', formVersion);
+                formData.append('Timestamp', new Date().toISOString());
+
+                try {
+                    const response = await fetch(ENDPOINT_URL, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (response.ok) {
+                        alert("תודה, פרטיך התקבלו בהצלחה. ניצור עמך קשר בהקדם."); 
+                        console.log("הטופס נשלח בהצלחה. נתוני הטופס:", Object.fromEntries(formData.entries()));
+
+                        contactForm.reset();
+                        setupABTest(); // Reset form for next test
+                    } else {
+                        // Handle non-OK status codes (e.g., 404, 500)
+                        setFeedback(versionDisplay, `❌ שגיאה בשליחת הטופס (קוד ${response.status}). אנא נסה שוב.`, false);
+                    }
+                } catch (error) {
+                    // Handle network errors
+                    setFeedback(versionDisplay, '❌ שגיאה בשליחת הטופס. אנא בדוק את החיבור לרשת ונסה שוב.', false);
+                    console.error('Error during fetch:', error);
+                }
+            }
+        });
+
+
+        // --- 5. Monitoring Dashboard Logic (Chart.js) ---
+        
+        // Static Demo Data
+        const latencyData = [200, 500, 1200, 850, 300, 450, 700, 1100];
+        const averageLatency = latencyData.reduce((a, b) => a + b) / latencyData.length;
+        const statusText = document.getElementById('statusText');
+        const statusBar = document.getElementById('statusBar');
+
+        // Status Bar Logic (Using Grammarly's toned messages)
+        let statusClass;
+        let statusMessage;
+        
+        if (averageLatency < 600) {
+            statusClass = 'bg-green-500';
+            statusMessage = 'מצוין: המערכת פועלת במהירות שיא.';
+        } else if (averageLatency >= 600 && averageLatency <= 1000) {
+            statusClass = 'bg-yellow-500';
+            statusMessage = 'תקין: זמן תגובה ממוצע (נדרשת תשומת לב קלה).';
+        } else {
+             statusClass = 'bg-red-500';
+             statusMessage = 'נמצאה תקלה קריטית. צוות התמיכה מטפל בנושא ברגעים אלו.'; // שימוש בטקסט המשופר
+        }
+        
+        statusBar.className = `h-4 rounded-full ${statusClass}`;
+        statusText.textContent = `${statusMessage} (${averageLatency.toFixed(0)} ms)`;
+
+
+        // Chart 1: Latency Chart
+        const ctx1 = document.getElementById('latencyChart').getContext('2d');
+        new Chart(ctx1, {
+            type: 'line',
+            data: { 
+                labels: ['1', '2', '3', '4', '5', '6', '7', '8'],
+                datasets: [{
+                    label: 'זמן תגובה (אלפיות שנייה)', // Grammarly recommended 'ms', using the original here for full context
+                    data: latencyData, 
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: { responsive: true, scales: { y: { beginAtZero: true } } }
+        });
+
+        // Chart 2: Topic Distribution Chart
+        const ctx2 = document.getElementById('topicDistributionChart').getContext('2d');
+        const topicData = [100, 200, 30]; 
+        new Chart(ctx2, {
+            type: 'pie',
+            data: { 
+                labels: ['תמיכה טכנית', 'פניות שיווק', 'שגיאות מערכת (מטופלות)'], 
+                datasets: [{
+                    data: topicData, 
+                    backgroundColor: ['#36A2EB', '#FF6384', '#FFCE56'],
+                }]
+            },
+            options: { responsive: true, plugins: { legend: { position: 'top' }, title: { display: false } } }
+        });
+
+        // Show dashboard only after load
+        document.getElementById('monitorDashboard').classList.remove('hidden');
+
+    </script>
+</body>
+
+</html>
