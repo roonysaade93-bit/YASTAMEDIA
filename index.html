@@ -26,7 +26,6 @@
 
   /* ========================================================= */
   /* [SHADRUG 2] CSS Isolation - אפקטי UI מתקדמים (Glow & Press) */
-  /* לא נוגע ב-CSS קיים. מוכן לשימוש עתידי ב-JS */
   /* ========================================================= */
   
   /* אפקט זוהר ב-hover */
@@ -43,6 +42,16 @@
     transform: scale(0.98);
     box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
     transition: transform 0.1s ease, box-shadow 0.1s ease;
+  }
+
+  /* ========================================================= */
+  /* [SHADRUG 3] אינדיקטורים חזותיים לולידציה (חדש) */
+  /* ========================================================= */
+  .input-valid {
+    border-color: #34d399 !important; /* ירוק בהיר */
+  }
+  .input-invalid {
+    border-color: #ef4444 !important; /* אדום בהיר */
   }
 </style>
 </head>
@@ -182,13 +191,13 @@
 
   const nameInput = document.getElementById('name');
   const phoneInput = document.getElementById('phone');
-  const messageInput = document.getElementById('message'); // [חדש] לשימוש ב-fetch
+  const messageInput = document.getElementById('message');
   const nameError = document.getElementById('name-error');
   const phoneError = document.getElementById('phone-error');
-  const serviceCards = document.querySelectorAll('.service-card'); // [חדש] לשיפורי UI
+  const serviceCards = document.querySelectorAll('.service-card');
 
   // ====================================================================
-  // 2. פונקציות ולידציה (ללא שינוי)
+  // 2. פונקציות ולידציה
   // ====================================================================
   
   function validatePhone(phone) {
@@ -197,98 +206,113 @@
   function validateName(name) {
     return name.trim().length >= 2;
   }
+  
+  /**
+   * מטפל בולידציה ומעדכן את המראה החזותי של שדה הקלט.
+   * [SHADRUG 3] - נוספו קלאסים input-valid/input-invalid
+   */
   function handleValidation(inputElement, errorElement, validator, errorMessage) {
     const isValid = validator(inputElement.value);
     
+    // הסרת כל הקלאסים הקודמים
+    inputElement.classList.remove('input-valid', 'input-invalid');
+
     if (!isValid) {
       errorElement.textContent = errorMessage;
       inputElement.setAttribute('aria-invalid', 'true');
+      inputElement.classList.add('input-invalid'); // סימון אדום
     } else {
       errorElement.textContent = ''; 
       inputElement.setAttribute('aria-invalid', 'false');
+      if (inputElement.value.trim().length > 0) {
+          inputElement.classList.add('input-valid'); // סימון ירוק רק אם הוזן משהו
+      }
     }
     return isValid;
   }
 
   // ====================================================================
-  // [SHADRUG 1] טיפול בטופס - קריאת Fetch אמיתית (Backend Mock)
+  // [SHADRUG 1 - PRODUCTION READY] טיפול בטופס - קריאת Fetch אמיתית
   // ====================================================================
 
   /**
-   * פונקציית סימולציה של API (יחליף את ה-Backend האמיתי).
-   * מחזיר Promise שנדחה 20% מהזמן לטובת בדיקת שגיאות.
+   * פונקציה לשליחת הנתונים לשרת האמיתי.
+   * [הערה: יש לוודא שה-Endpoint /api/contact מוגדר בשרת שלך].
    */
-  function submitApiMock(formData) {
-    return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        // סימולציה: 20% סיכוי לשגיאת שרת
-        if (Math.random() < 0.2) {
-          reject(new Error("Internal Server Error (500)"));
-        } else {
-          // סימולציה: הצלחה
-          resolve({ status: 'success', message: 'הליד נקלט בהצלחה' });
-        }
-      }, 3000); // סימולציית זמן תגובה של 3 שניות
+  async function sendContactForm(formData) {
+    const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
     });
+
+    if (!response.ok) {
+        // מנסה לקרוא הודעת שגיאה מפורטת מהשרת
+        const errorData = await response.json().catch(() => ({ message: 'שגיאת שרת לא מוגדרת' }));
+        throw new Error(`${errorData.message || response.statusText || `קוד שגיאה: ${response.status}`}`);
+    }
+
+    return response.json(); 
   }
 
   /**
-   * פונקציית ניהול שליחת טופס - משתמשת ב-fetch/Mock API
+   * פונקציית ניהול שליחת טופס - משתמשת ב-fetch אמיתי
    */
   async function handleFormSubmit(e) {
     e.preventDefault();
     const originalText = submitButton.textContent;
     
-    // ולידציה לפני השליחה (ללא שינוי)
+    // 1. ולידציה לפני השליחה
     const isNameValid = handleValidation(nameInput, nameError, validateName, '⚠️ שם מלא חייב להכיל 2 תווים לפחות.');
     const isPhoneValid = handleValidation(phoneInput, phoneError, validatePhone, '⚠️ יש להזין מספר טלפון תקין (9 או 10 ספרות).');
 
     if (!isNameValid || !isPhoneValid) {
-      formMessage.textContent = '🛑 שגיאת טופס: אנא תקן את השדות המסומנים באדום.';
-      formMessage.classList.remove('hidden');
-      return;
+        formMessage.textContent = '🛑 שגיאת טופס: אנא תקן את השדות המסומנים באדום.';
+        formMessage.classList.remove('hidden');
+        return;
     }
 
+    // 2. מצב טעינה
     formMessage.classList.add('hidden');
     submitButton.textContent = 'שולח... אנא המתן 🚀';
     submitButton.disabled = true;
 
     try {
-      // [FUNCTIONAL CHANGE] החלפת setTimeout בקריאת API (או Mock)
-      // ניתן להחליף את submitApiMock בקריאת fetch אמיתית ל- /api/contact
-      const response = await submitApiMock({ 
-        name: nameInput.value, 
-        phone: phoneInput.value, 
-        message: messageInput.value 
-      });
+        // 3. שליחת נתונים
+        await sendContactForm({ 
+            name: nameInput.value, 
+            phone: phoneInput.value, 
+            message: messageInput.value 
+        });
 
-      // הצלחה
-      formMessage.textContent = '✅ ההודעה נשלחה בהצלחה! תודה, נציג יחזור אליך בהקדם (תוך שעה).';
-      formMessage.classList.remove('hidden');
-
-      submitButton.textContent = 'פנייתך התקבלה ✔️';
-      contactForm.reset();
+        // 4. הצלחה
+        formMessage.textContent = '✅ ההודעה נשלחה בהצלחה! תודה, נציג יחזור אליך בהקדם (תוך שעה).';
+        formMessage.classList.remove('hidden');
+        submitButton.textContent = 'פנייתך התקבלה ✔️';
+        contactForm.reset();
+        // ניקוי סימוני ולידציה ירוקים לאחר האיפוס
+        nameInput.classList.remove('input-valid');
+        phoneInput.classList.remove('input-valid');
 
     } catch (error) {
-      // [ERROR HANDLING] טיפול בשגיאת שרת
-      console.error('Submission error:', error);
-      
-      formMessage.textContent = '❌ שגיאת שרת: אירעה תקלה, אנא נסה שוב בעוד מספר דקות.';
-      formMessage.classList.remove('hidden');
-      
-      submitButton.textContent = originalText; // החזרה למצב "שלח" כדי לאפשר ניסיון חוזר
-      
+        // 5. שגיאה
+        console.error('Submission error:', error);
+        
+        formMessage.textContent = `❌ שגיאה: ${error.message}. אנא נסה שוב בעוד מספר דקות.`;
+        formMessage.classList.remove('hidden');
+        submitButton.textContent = originalText; // החזרה למצב "שלח"
+        
     } finally {
-      // [FINAL STATE] סיום השליחה
-      submitButton.disabled = false;
-      
-      // הסתרת ההודעה וחזרה לטקסט המקורי לאחר 7 שניות
-      setTimeout(() => {
-        formMessage.classList.add('hidden');
-        if (submitButton.textContent !== 'פנייתך התקבלה ✔️') {
-            submitButton.textContent = originalText;
-        }
-      }, 7000); 
+        // 6. סיום
+        submitButton.disabled = false;
+        
+        // הסתרת ההודעה וחזרה לטקסט המקורי
+        setTimeout(() => {
+            formMessage.classList.add('hidden');
+            if (submitButton.textContent !== 'פנייתך התקבלה ✔️') {
+                submitButton.textContent = originalText;
+            }
+        }, 7000); 
     }
   }
 
@@ -324,7 +348,6 @@
   // ====================================================================
 
   function handleLoadMore() {
-    // לוגיקה לטעינת ביקורות (ללא שינוי)
     loadMoreBtn.textContent = 'טוען עוד עדויות... ⏳';
     loadMoreBtn.disabled = true;
 
